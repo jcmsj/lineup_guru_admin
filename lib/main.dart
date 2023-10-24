@@ -1,321 +1,214 @@
-import 'dart:async';
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:circle_nav_bar/circle_nav_bar.dart';
+import 'page_title_widget.dart';
+import 'queue_list.dart';
+import 'server_url_widget.dart';
+import 'second_route.dart';
 import 'package:provider/provider.dart';
+import 'q_r_view_example.dart';
+import 'settings_page.dart';
 
-void main() {
-  runApp(MultiProvider(
-    providers: [
-      ChangeNotifierProvider(
-        create: (ctx) => QueueNotifier(),
-      ),
-      ChangeNotifierProvider(
-        create: (ctx) => ServerUrlNotifier(),
-      ),
-    ],
-    child: const MyApp(),
-  ));
+void main() async {
+  runApp(const MyApp());
 }
 
-Future<ShopQueue> fetchQueue(String url, String name) async {
-  final response = await http.get(Uri.parse('$url/queue/$name'));
-  print(response.body);
-  if (response.statusCode == 200) {
-    // Do something with the response body
-    return ShopQueue.fromJson(jsonDecode(response.body));
-  } else {
-    throw Exception('Failed to fetch queue');
-  }
-}
-
-// create a MyApp class that mimics the layout of lineup_guru_app for an admin version of the app
-class MyApp extends StatefulWidget {
-  const MyApp({Key? key}) : super(key: key);
-
-  @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  @override
-  void initState() {
-    super.initState();
-    // Poll the queue every 2 seconds
-    Timer.periodic(const Duration(seconds: 2), (timer) {
-      final queueNotifier = Provider.of<QueueNotifier>(context, listen: false);
-      queueNotifier.pollQueue(
-        Provider.of<ServerUrlNotifier>(context, listen: false).serverUrl,
-        "sample",
-      );
-    });
-  }
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Wrap the MaterialApp with a ChangeNotifierProvider for the ServerUrlNotifier
-    return ChangeNotifierProvider(
-      create: (context) => ServerUrlNotifier(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (ctx) => QueueNotifier(),
+        ),
+        ChangeNotifierProvider(
+          create: (ctx) => ServerUrlNotifier(),
+        ),
+      ],
       child: MaterialApp(
-        title: 'Lineup Guru',
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-        ),
-        home: Consumer<QueueNotifier>(
-          builder: (context, value, child) {
-            if (value.queue == null) {
-              return const CircularProgressIndicator();
-            }
-
-            return EditQueueScreen(queue: value.queue!);
-          },
-        ),
+        theme: customTheme(),
+        home: BottomNavBar(),
       ),
+    );
+  }
+
+  ThemeData customTheme() {
+    return ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color.fromARGB(255, 255, 189, 89),
+        surface: const Color.fromARGB(255, 64, 55, 52),
+        onSurface: Colors.white,
+        background: const Color.fromARGB(255, 255, 247, 207),
+        brightness: Brightness.light,
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Color.fromARGB(255, 255, 235, 150),
+        foregroundColor: Colors.black,
+      ),
+      primaryColor: const Color.fromARGB(255, 255, 189, 89),
+      useMaterial3: true,
     );
   }
 }
 
-class ServerUrlNotifier extends ChangeNotifier {
-  String _serverUrl = "http://localhost:88";
+class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
+  final double height;
 
-  String get serverUrl => _serverUrl;
-
-  set serverUrl(String url) {
-    _serverUrl = url;
-    notifyListeners();
-  }
-}
-
-class ShopQueue {
-  final int id;
-  final String name;
-  final int current;
-  final int lastPosition;
-  final String createdAt;
-  final String iconName;
-  ShopQueue({
-    required this.id,
-    required this.name,
-    required this.createdAt,
-    required this.current,
-    required this.lastPosition,
-    required this.iconName,
-  });
-
-  factory ShopQueue.fromJson(Map<String, dynamic> json) {
-    return ShopQueue(
-      id: json['id'],
-      name: json['name'],
-      createdAt: json['created_at'],
-      current: json['current'],
-      lastPosition: json['last_position'],
-      iconName: json['icon'],
-    );
-  }
-}
-
-class QueueNotifier extends ChangeNotifier {
-  ShopQueue? _queue;
-  int _myNumber = -1;
-  ShopQueue? get queue => _queue;
-  int get myNumber => _myNumber;
-  void setQueue(ShopQueue queue) {
-    _queue = queue;
-    notifyListeners();
-  }
-
-  void setMyNumber(int myNumber) {
-    _myNumber = myNumber;
-    notifyListeners();
-  }
-
-  void pollQueue(String url, String name) async {
-    // Get ServerURL from ServerUrlNotifier
-    final response = await http.get(Uri.parse('$url/queue/$name'));
-    if (response.statusCode == 200) {
-      // body -> json -> Update queueNotifier
-      setQueue(ShopQueue.fromJson(jsonDecode(response.body)));
-    } else {
-      print(
-        'Failed to fetch queue. Reason: ${response.body}',
-      );
-    }
-  }
-}
-
-class QueueAdmin extends StatefulWidget {
-  @override
-  _QueueAdminState createState() => _QueueAdminState();
-}
-
-class _QueueAdminState extends State<QueueAdmin> {
-  final _queueNotifier = QueueNotifier();
-  final _queueNameController = TextEditingController();
-  // ...
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Queue Admin'),
-      ),
-      body: ListView(
-        children: [
-          ListTile(
-            title: const Text('Add Queue'),
-            onTap: () {
-              showDialog(
-                context: context,
-                builder: (context) {
-                  return AlertDialog(
-                    title: const Text('Add Queue'),
-                    content: TextField(
-                      controller: _queueNameController,
-                      decoration: const InputDecoration(
-                        hintText: 'Enter queue name',
-                      ),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                        },
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          final queueName = _queueNameController.text;
-                          final response = await http.post(
-                            Uri.parse('https://example.com/api/queues'),
-                            body: {'name': queueName},
-                          );
-                          if (response.statusCode == 201) {
-                            final queue = ShopQueue.fromJson(
-                              jsonDecode(response.body),
-                            );
-                            _queueNotifier.setQueue(queue);
-                          }
-                          Navigator.pop(context);
-                        },
-                        child: const Text('Add'),
-                      ),
-                    ],
-                  );
-                },
-              );
-            },
-          ),
-          ListTile(
-            title: const Text('Edit Queue'),
-            onTap: () {
-              // TODO: Implement editing queue
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class EditQueueScreen extends StatefulWidget {
-  final ShopQueue queue;
-
-  const EditQueueScreen({Key? key, required this.queue}) : super(key: key);
-
-  @override
-  _EditQueueScreenState createState() => _EditQueueScreenState();
-}
-
-class _EditQueueScreenState extends State<EditQueueScreen> {
-  final _queueNameController = TextEditingController();
-  int _queueCurrent = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _queueNameController.text = widget.queue.name;
-    _queueCurrent = widget.queue.current;
-  }
+  const CustomAppBar({super.key, required this.height});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Edit Queue'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Queue Name',
-              style: TextStyle(fontSize: 18),
-            ),
-            TextField(
-              controller: _queueNameController,
-              decoration: const InputDecoration(
-                hintText: 'Enter queue name',
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                const Text(
-                  'Current Queue Number',
-                  style: TextStyle(fontSize: 18),
-                ),
-                const SizedBox(width: 16),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _queueCurrent--;
-                    });
-                  },
-                  child: const Icon(Icons.remove),
-                ),
-                const SizedBox(width: 16),
-                Text(
-                  _queueCurrent.toString(),
-                  style: const TextStyle(fontSize: 18),
-                ),
-                const SizedBox(width: 16),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _queueCurrent++;
-                    });
-                  },
-                  child: const Icon(Icons.add),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Consumer<ServerUrlNotifier>(
-              builder: (BuildContext context, ServerUrlNotifier value,
-                  Widget? child) {
-                return ElevatedButton(
-                  onPressed: () async {
-                    final queueName = _queueNameController.text;
-                    print(value.serverUrl);
-                    final response = await http.post(
-                      Uri.parse('${value.serverUrl}/update/${widget.queue.id}'),
-                      body: {
-                        'name': queueName,
-                        'current': _queueCurrent.toString(),
-                        'icon': widget.queue.iconName,
-                        'last_position': widget.queue.lastPosition.toString(),
-                        'created_at': widget.queue.createdAt.toString(),
-                      },
-                    );
-                    print(response.body);
-                    if (response.statusCode == 200) {}
-                  },
-                  child: const Text('Save'),
-                );
-              },
+    return SizedBox(
+      height: height,
+      child: AppBar(
+        elevation: 0,
+        centerTitle: true,
+        title: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Icon(Icons.qr_code),
+            SizedBox(width: 10),
+            Text(
+              "Line-Up Guru | Admin",
+              style: TextStyle(fontSize: 25),
             ),
           ],
+        ),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Size get preferredSize => Size.fromHeight(height);
+}
+
+class HomePage extends StatelessWidget {
+  const HomePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const PageTitleWidget(title: "Services"),
+        Expanded(
+          child: buildFutureBuilderQueues(),
+        ),
+      ],
+    );
+  }
+}
+
+class ServiceCard extends StatelessWidget {
+  final String serviceName;
+  final String iconName;
+  const ServiceCard(this.serviceName, this.iconName, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 25),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(40.0),
+      ),
+      child: SizedBox(
+        height: 150.0, // Adjust the height here
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Dont use an Icon/IconData since we cant generate a list of available icons in the app. Also The admin needs to visit the google material icons page for the available icons and names
+            Text(
+              iconName,
+              style: const TextStyle(
+                fontFamily: "MaterialIcons",
+                color: Colors.yellowAccent,
+                fontSize: 48,
+              ),
+            ),
+            const SizedBox(height: 16.0),
+            Text(
+              serviceName,
+              style: const TextStyle(
+                fontSize: 17.0,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class BottomNavBar extends StatefulWidget {
+  const BottomNavBar({super.key});
+
+  @override
+  State<BottomNavBar> createState() => _BottomNavBarState();
+}
+
+class _BottomNavBarState extends State<BottomNavBar>
+    with SingleTickerProviderStateMixin {
+  int _tabIndex = 0;
+  int get tabIndex => _tabIndex;
+  set tabIndex(int v) {
+    _tabIndex = v;
+    setState(() {});
+  }
+
+  late PageController pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    pageController = PageController(initialPage: _tabIndex);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: const CustomAppBar(height: 125),
+      body: PageView(
+        controller: pageController,
+        onPageChanged: (v) {
+          tabIndex = v;
+        },
+        children: const [
+          HomePage(),
+          QRViewExample(),
+          SettingsPage(),
+        ],
+      ),
+      bottomNavigationBar: CircleNavBar(
+        activeIcons: const [
+          Icon(Icons.home_outlined, color: Colors.white, size: 35),
+          Icon(Icons.qr_code_sharp, color: Colors.white, size: 35),
+          Icon(Icons.settings_outlined, color: Colors.white, size: 35),
+        ],
+        inactiveIcons: const [
+          Icon(Icons.home_outlined, color: Colors.black, size: 35),
+          Icon(Icons.qr_code_sharp, color: Colors.black, size: 35),
+          Icon(Icons.settings_outlined, color: Colors.black, size: 35),
+        ],
+        color: const Color.fromARGB(255, 255, 235, 150),
+        circleColor: const Color.fromARGB(255, 64, 55, 52),
+        circleShadowColor: Colors.black,
+        elevation: 10,
+        height: 90,
+        circleWidth: 70,
+        activeIndex: tabIndex,
+        onTap: (index) {
+          tabIndex = index;
+          pageController.jumpToPage(tabIndex);
+        },
+        cornerRadius: const BorderRadius.only(
+          topLeft: Radius.circular(30),
+          topRight: Radius.circular(30),
         ),
       ),
     );
